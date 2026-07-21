@@ -125,7 +125,7 @@ void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& 
       return la["pos_in_scrolling_layout"][1].asInt() < lb["pos_in_scrolling_layout"][1].asInt();
     });
 
-    rebuildTaskbar(my_windows);
+    updateTaskbar(my_windows);
     taskbar_box_.show();
     label_.hide();
   } else {
@@ -133,15 +133,40 @@ void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& 
       taskbar_box_.remove(*child);
     }
     taskbar_box_.hide();
+    taskbar_windows_.clear();
   }
 }
 
-// ── Taskbar rebuild ──────────────────────────────────────────────────────────
+// ── Taskbar update ───────────────────────────────────────────────────────────
 
-void Workspace::rebuildTaskbar(const std::vector<Json::Value>& my_windows) {
+void Workspace::updateTaskbar(const std::vector<Json::Value>& my_windows) {
+  std::vector<TaskbarWindow> next_windows;
+  next_windows.reserve(my_windows.size());
+  for (const auto& win : my_windows) {
+    next_windows.push_back({win["id"].asUInt64(), win["app_id"].asString()});
+  }
+
+  const auto children = taskbar_box_.get_children();
+  if (next_windows == taskbar_windows_ && children.size() == my_windows.size()) {
+    for (std::size_t i = 0; i < my_windows.size(); ++i) {
+      auto* btn = dynamic_cast<Gtk::Button*>(children[i]);
+      if (btn == nullptr) return;
+
+      auto style = btn->get_style_context();
+      if (my_windows[i]["is_focused"].asBool()) {
+        style->add_class("focused");
+      } else {
+        style->remove_class("focused");
+      }
+      btn->set_tooltip_text(my_windows[i]["title"].asString());
+    }
+    return;
+  }
+
   for (auto* child : taskbar_box_.get_children()) {
     taskbar_box_.remove(*child);
   }
+  taskbar_windows_ = std::move(next_windows);
 
   const auto& taskbar_cfg = manager_.config()["workspace-taskbar"];
   const int icon_size = taskbar_cfg["icon-size"].isInt() ? taskbar_cfg["icon-size"].asInt() : 16;

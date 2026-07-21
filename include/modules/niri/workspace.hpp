@@ -8,6 +8,7 @@
 #include <json/value.h>
 
 #include <string>
+#include <vector>
 
 namespace waybar::modules::niri {
 
@@ -28,7 +29,14 @@ class Workspace {
               const std::string& windows_str, std::size_t total);
 
  private:
-  void rebuildTaskbar(const std::vector<Json::Value>& my_windows);
+  struct TaskbarWindow {
+    uint64_t id;
+    std::string app_id;
+
+    bool operator==(const TaskbarWindow&) const = default;
+  };
+
+  void updateTaskbar(const std::vector<Json::Value>& my_windows);
 
   Glib::RefPtr<Gio::Icon> resolveIcon(const std::string& app_id);
 
@@ -43,6 +51,7 @@ class Workspace {
   Gtk::Box box_;
   Gtk::Label label_;
   Gtk::Box taskbar_box_;
+  std::vector<TaskbarWindow> taskbar_windows_;
 };
 
 }  // namespace waybar::modules::niri
