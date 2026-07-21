@@ -38,7 +38,7 @@ class Workspace {
 
   void updateTaskbar(const std::vector<Json::Value>& my_windows);
 
-  Glib::RefPtr<Gio::Icon> resolveIcon(const std::string& app_id);
+  Glib::RefPtr<Gio::Icon> resolveIcon(const std::string& app_id, const std::string& title);
 
   Workspaces& manager_;
   uint64_t id_;
