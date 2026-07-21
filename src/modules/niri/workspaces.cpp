@@ -134,7 +134,7 @@ void Workspaces::doUpdate() {
                                          [&](const Json::Value* ws) {
                                            return ws->operator[]("id").asUInt64() == w->id();
                                          });
-                                     if (gone) box_.remove(w->button());
+                                     if (gone) box_.remove(w->widget());
                                      return gone;
                                    }),
                     workspaces_.end());
@@ -167,7 +167,7 @@ void Workspaces::doUpdate() {
         std::find_if(workspaces_.begin(), workspaces_.end(),
                      [ws_id](const std::unique_ptr<Workspace>& w) { return w->id() == ws_id; });
     if (it != workspaces_.end()) {
-      box_.reorder_child((*it)->button(), pos);
+      box_.reorder_child((*it)->widget(), pos);
     }
   }
 }
@@ -179,7 +179,7 @@ void Workspaces::update() {
 
 void Workspaces::createWorkspace(const Json::Value& workspace_data) {
   auto ws = std::make_unique<Workspace>(workspace_data, *this);
-  box_.pack_start(ws->button(), false, false, 0);
+  box_.pack_start(ws->widget(), false, false, 0);
   workspaces_.push_back(std::move(ws));
 }
 

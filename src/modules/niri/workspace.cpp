@@ -15,14 +15,14 @@ namespace waybar::modules::niri {
 Workspace::Workspace(const Json::Value& workspace_data, Workspaces& manager)
     : manager_(manager),
       id_(workspace_data["id"].asUInt64()),
-      box_(Gtk::ORIENTATION_HORIZONTAL, 0),
+      container_(Gtk::ORIENTATION_HORIZONTAL, 0),
       taskbar_box_(Gtk::ORIENTATION_HORIZONTAL, 0) {
-  button_.add(box_);
-  box_.pack_start(label_, false, false, 0);
-  box_.pack_start(taskbar_box_, false, false, 0);
+  button_.add(label_);
+  container_.pack_start(button_, false, false, 0);
+  container_.pack_start(taskbar_box_, false, false, 0);
 
   button_.set_relief(Gtk::RELIEF_NONE);
-  button_.get_style_context()->add_class("niri-workspace");
+  container_.get_style_context()->add_class("niri-workspace");
 
   if (!manager_.config()["disable-click"].asBool()) {
     const auto ws_id = id_;
@@ -40,13 +40,13 @@ Workspace::Workspace(const Json::Value& workspace_data, Workspaces& manager)
     });
   }
 
-  button_.show_all();
+  container_.show_all();
 }
 
 void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& all_windows,
                        const std::string& windows_str, std::size_t total) {
   // ── CSS classes ──────────────────────────────────────────────────────────
-  auto style = button_.get_style_context();
+  auto style = container_.get_style_context();
 
   auto setClass = [&](const char* cls, bool on) {
     if (on)
@@ -70,7 +70,7 @@ void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& 
     name = std::to_string(data["idx"].asUInt());
   }
 
-  button_.set_name("niri-workspace-" + name);
+  container_.set_name("niri-workspace-" + name);
 
   const auto& cfg = manager_.config();
 
@@ -93,12 +93,12 @@ void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& 
   const bool alloutputs = cfg["all-outputs"].asBool();
   if (cfg["current-only"].asBool()) {
     const auto* prop = alloutputs ? "is_focused" : "is_active";
-    data[prop].asBool() ? button_.show() : button_.hide();
+    data[prop].asBool() ? container_.show() : container_.hide();
   } else if (cfg["hide-empty"].asBool()) {
-    (data["active_window_id"].isNull() && !data["is_focused"].asBool()) ? button_.hide()
-                                                                        : button_.show();
+    (data["active_window_id"].isNull() && !data["is_focused"].asBool()) ? container_.hide()
+                                                                        : container_.show();
   } else {
-    button_.show();
+    container_.show();
   }
 
   // ── Taskbar ───────────────────────────────────────────────────────────────
@@ -127,12 +127,13 @@ void Workspace::update(const Json::Value& data, const std::vector<Json::Value>& 
 
     updateTaskbar(my_windows);
     taskbar_box_.show();
-    label_.hide();
+    button_.hide();
   } else {
     for (auto* child : taskbar_box_.get_children()) {
       taskbar_box_.remove(*child);
     }
     taskbar_box_.hide();
+    button_.show();
     taskbar_windows_.clear();
   }
 }

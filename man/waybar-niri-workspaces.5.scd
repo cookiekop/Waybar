@@ -199,9 +199,9 @@ Additional to workspace name matching, the following *format-icons* can be set.
 - *#workspaces button.empty*: The workspace is empty.
 - *#workspaces button.current_output*: The workspace is from the same output as
   the bar that it is displayed on.
-- *#workspaces button#niri-workspace-<name>*: Workspaces named this, or index
+- *#workspaces #niri-workspace-<name>*: Workspaces named this, or index
   for unnamed workspaces.
-- *#workspaces button.niri-workspace*: The main container for the workspace.
+- *#workspaces .niri-workspace*: The main container for the workspace.
 - *#workspaces button .niri-taskbar-btn*: The icon buttons within the taskbar.
 - *#workspaces button .niri-taskbar-btn.focused*: The taskbar icon button of the
   currently focused window.
