@@ -1,5 +1,6 @@
 #include "modules/niri/workspace.hpp"
 
+#include <giomm/appinfo.h>
 #include <giomm/desktopappinfo.h>
 #include <giomm/icon.h>
 #include <giomm/themedicon.h>
@@ -11,6 +12,61 @@
 #include "modules/niri/workspaces.hpp"
 
 namespace waybar::modules::niri {
+namespace {
+
+std::string normalizeDesktopField(const std::string& value) {
+  std::string normalized;
+  normalized.reserve(value.size());
+  for (const unsigned char character : value) {
+    if (std::isalnum(character)) normalized.push_back(std::tolower(character));
+  }
+  return normalized;
+}
+
+Glib::RefPtr<Gio::Icon> resolveWebAppIcon(const std::string& app_id, const std::string& title) {
+  if (!app_id.starts_with("chrome-")) return {};
+
+  std::string app_key = normalizeDesktopField(app_id);
+  app_key.erase(0, std::string("chrome").size());
+  const auto title_key = normalizeDesktopField(title);
+
+  for (const auto& app_info : Gio::AppInfo::get_all()) {
+    const auto commandline = app_info->get_commandline();
+    if (commandline.find("watchtower-launch-webapp") == std::string::npos &&
+        commandline.find("--app=") == std::string::npos &&
+        commandline.find("--app-id=") == std::string::npos) {
+      continue;
+    }
+
+    const auto desktop_info = Glib::RefPtr<Gio::DesktopAppInfo>::cast_dynamic(app_info);
+    std::string startup_class;
+    if (desktop_info) startup_class = normalizeDesktopField(desktop_info->get_startup_wm_class());
+    if (startup_class.starts_with("crx")) startup_class.erase(0, 3);
+
+    const auto commandline_key = normalizeDesktopField(commandline);
+    const auto desktop_id_key = normalizeDesktopField(app_info->get_id());
+    const auto display_name_key = normalizeDesktopField(app_info->get_display_name());
+
+    const bool id_matches =
+        !app_key.empty() && (commandline_key.find(app_key) != std::string::npos ||
+                             desktop_id_key.find(app_key) != std::string::npos);
+    const bool startup_class_matches =
+        !startup_class.empty() && app_key.find(startup_class) != std::string::npos;
+    const bool title_matches =
+        display_name_key.size() >= 3 && title_key.find(display_name_key) != std::string::npos;
+
+    if (id_matches || startup_class_matches || title_matches) {
+      if (auto icon = app_info->get_icon()) {
+        spdlog::debug("Niri: matched web app {} to desktop entry {}", app_id, app_info->get_id());
+        return icon;
+      }
+    }
+  }
+
+  return {};
+}
+
+}  // namespace
 
 Workspace::Workspace(const Json::Value& workspace_data, Workspaces& manager)
     : manager_(manager),
@@ -21,6 +77,9 @@ Workspace::Workspace(const Json::Value& workspace_data, Workspaces& manager)
   container_.pack_start(button_, false, false, 0);
   container_.pack_start(taskbar_box_, false, false, 0);
 
+  container_.set_valign(Gtk::ALIGN_CENTER);
+  button_.set_valign(Gtk::ALIGN_CENTER);
+  taskbar_box_.set_valign(Gtk::ALIGN_CENTER);
   button_.set_relief(Gtk::RELIEF_NONE);
   container_.get_style_context()->add_class("niri-workspace");
 
@@ -179,15 +238,20 @@ void Workspace::updateTaskbar(const std::vector<Json::Value>& my_windows) {
     const bool is_focused = win["is_focused"].asBool();
 
     auto* btn = Gtk::make_managed<Gtk::Button>();
+    btn->set_valign(Gtk::ALIGN_CENTER);
     btn->set_relief(Gtk::RELIEF_NONE);
+    btn->set_focus_on_click(false);
     btn->get_style_context()->add_class("niri-taskbar-btn");
     if (is_focused) btn->get_style_context()->add_class("focused");
     btn->set_tooltip_text(title);
 
-    auto icon = resolveIcon(app_id);
+    auto icon = resolveIcon(app_id, title);
     if (icon) {
       auto* img = Gtk::make_managed<Gtk::Image>(icon, Gtk::ICON_SIZE_INVALID);
       img->set_pixel_size(icon_size);
+      img->set_size_request(icon_size, icon_size);
+      img->set_halign(Gtk::ALIGN_CENTER);
+      img->set_valign(Gtk::ALIGN_CENTER);
       btn->add(*img);
     } else {
       std::string fallback = app_id.empty() ? title : app_id;
@@ -197,31 +261,35 @@ void Workspace::updateTaskbar(const std::vector<Json::Value>& my_windows) {
         fallback = "?";
       }
       auto* lbl = Gtk::make_managed<Gtk::Label>(fallback);
+      lbl->set_valign(Gtk::ALIGN_CENTER);
       btn->add(*lbl);
     }
 
-    btn->signal_button_press_event().connect([win_id](GdkEventButton* event) -> bool {
-      const char* action_name = nullptr;
-      if (event->button == GDK_BUTTON_PRIMARY) {
-        action_name = "FocusWindow";
-      } else if (event->button == GDK_BUTTON_MIDDLE) {
-        action_name = "CloseWindow";
+    btn->signal_pressed().connect([win_id] {
+      try {
+        Json::Value request(Json::objectValue);
+        auto& action = (request["Action"] = Json::Value(Json::objectValue));
+        auto& focus_window = (action["FocusWindow"] = Json::Value(Json::objectValue));
+        focus_window["id"] = win_id;
+        IPC::send(request);
+      } catch (const std::exception& e) {
+        spdlog::error("Niri: error focusing window {}: {}", win_id, e.what());
       }
+    });
 
-      if (action_name != nullptr) {
-        try {
-          Json::Value request(Json::objectValue);
-          auto& action = (request["Action"] = Json::Value(Json::objectValue));
-          auto& window_action = (action[action_name] = Json::Value(Json::objectValue));
-          window_action["id"] = win_id;
-          IPC::send(request);
-        } catch (const std::exception& e) {
-          spdlog::error("Niri: error executing {} for window {}: {}", action_name, win_id,
-                        e.what());
-        }
-        return true;
+    btn->signal_button_press_event().connect([win_id](GdkEventButton* event) -> bool {
+      if (event->button != GDK_BUTTON_MIDDLE) return false;
+
+      try {
+        Json::Value request(Json::objectValue);
+        auto& action = (request["Action"] = Json::Value(Json::objectValue));
+        auto& close_window = (action["CloseWindow"] = Json::Value(Json::objectValue));
+        close_window["id"] = win_id;
+        IPC::send(request);
+      } catch (const std::exception& e) {
+        spdlog::error("Niri: error closing window {}: {}", win_id, e.what());
       }
-      return false;
+      return true;
     });
 
     taskbar_box_.pack_start(*btn, false, false, 0);
@@ -231,12 +299,15 @@ void Workspace::updateTaskbar(const std::vector<Json::Value>& my_windows) {
 
 // ── Icon loading ─────────────────────────────────────────────────────────────
 
-Glib::RefPtr<Gio::Icon> Workspace::resolveIcon(const std::string& app_id) {
+Glib::RefPtr<Gio::Icon> Workspace::resolveIcon(const std::string& app_id,
+                                               const std::string& title) {
   if (app_id.empty()) return {};
 
   if (auto app_info = Gio::DesktopAppInfo::create(app_id + ".desktop")) {
     if (auto icon = app_info->get_icon()) return icon;
   }
+
+  if (auto icon = resolveWebAppIcon(app_id, title)) return icon;
 
   auto theme = Gtk::IconTheme::get_default();
   auto try_icon = [&theme](const std::string& name) -> Glib::RefPtr<Gio::Icon> {
