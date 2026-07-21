@@ -1,11 +1,11 @@
 #include "modules/niri/workspace.hpp"
 
-#include <gdkmm/pixbuf.h>
+#include <giomm/desktopappinfo.h>
+#include <giomm/icon.h>
+#include <giomm/themedicon.h>
 #include <gtkmm/icontheme.h>
 #include <gtkmm/image.h>
 #include <spdlog/spdlog.h>
-#include <giomm/desktopappinfo.h>
-#include <giomm/icon.h>
 
 #include "modules/niri/backend.hpp"
 #include "modules/niri/workspaces.hpp"
@@ -158,9 +158,10 @@ void Workspace::rebuildTaskbar(const std::vector<Json::Value>& my_windows) {
     if (is_focused) btn->get_style_context()->add_class("focused");
     btn->set_tooltip_text(title);
 
-    auto pixbuf = loadIcon(app_id, icon_size);
-    if (pixbuf) {
-      auto* img = Gtk::make_managed<Gtk::Image>(pixbuf);
+    auto icon = resolveIcon(app_id);
+    if (icon) {
+      auto* img = Gtk::make_managed<Gtk::Image>(icon, Gtk::ICON_SIZE_INVALID);
+      img->set_pixel_size(icon_size);
       btn->add(*img);
     } else {
       std::string fallback = app_id.empty() ? title : app_id;
@@ -173,30 +174,24 @@ void Workspace::rebuildTaskbar(const std::vector<Json::Value>& my_windows) {
       btn->add(*lbl);
     }
 
-    // Left click → focus window.
-    btn->signal_clicked().connect([win_id] {
-      try {
-        Json::Value request(Json::objectValue);
-        auto& action = (request["Action"] = Json::Value(Json::objectValue));
-        auto& focusWindow = (action["FocusWindow"] = Json::Value(Json::objectValue));
-        focusWindow["id"] = win_id;
-        IPC::send(request);
-      } catch (const std::exception& e) {
-        spdlog::error("Niri: error focusing window {}: {}", win_id, e.what());
+    btn->signal_button_press_event().connect([win_id](GdkEventButton* event) -> bool {
+      const char* action_name = nullptr;
+      if (event->button == GDK_BUTTON_PRIMARY) {
+        action_name = "FocusWindow";
+      } else if (event->button == GDK_BUTTON_MIDDLE) {
+        action_name = "CloseWindow";
       }
-    });
 
-    // Middle click → close window.
-    btn->signal_button_release_event().connect([win_id](GdkEventButton* event) -> bool {
-      if (event->button == GDK_BUTTON_MIDDLE) {
+      if (action_name != nullptr) {
         try {
           Json::Value request(Json::objectValue);
           auto& action = (request["Action"] = Json::Value(Json::objectValue));
-          auto& closeWindow = (action["CloseWindow"] = Json::Value(Json::objectValue));
-          closeWindow["id"] = win_id;
+          auto& window_action = (action[action_name] = Json::Value(Json::objectValue));
+          window_action["id"] = win_id;
           IPC::send(request);
         } catch (const std::exception& e) {
-          spdlog::error("Niri: error closing window {}: {}", win_id, e.what());
+          spdlog::error("Niri: error executing {} for window {}: {}", action_name, win_id,
+                        e.what());
         }
         return true;
       }
@@ -210,52 +205,33 @@ void Workspace::rebuildTaskbar(const std::vector<Json::Value>& my_windows) {
 
 // ── Icon loading ─────────────────────────────────────────────────────────────
 
-Glib::RefPtr<Gdk::Pixbuf> Workspace::loadIcon(const std::string& app_id, int size) {
-    if (app_id.empty()) return {};
-    auto app_info = Gio::DesktopAppInfo::create(app_id + ".desktop");
-        
-    if (app_info) {
-        auto icon = app_info->get_icon();
-        if (icon) {
-          auto theme = Gtk::IconTheme::get_default();
-          auto icon_info = theme->lookup_icon(icon, size, Gtk::ICON_LOOKUP_FORCE_SIZE);
-        
-          if (icon_info) {
-              try {
-                  
-                  return icon_info.load_icon(); 
-              } catch (...) {
-                
-              }
-          }
-      }
-    }
+Glib::RefPtr<Gio::Icon> Workspace::resolveIcon(const std::string& app_id) {
+  if (app_id.empty()) return {};
 
-    auto theme = Gtk::IconTheme::get_default();
-    
-    auto tryLoad = [&](const std::string& name) -> Glib::RefPtr<Gdk::Pixbuf> {
-        if (!theme->has_icon(name)) return {};
-        try {
-            return theme->load_icon(name, size, Gtk::ICON_LOOKUP_FORCE_SIZE);
-        } catch (...) {
-            return {};
-        }
-    };
+  if (auto app_info = Gio::DesktopAppInfo::create(app_id + ".desktop")) {
+    if (auto icon = app_info->get_icon()) return icon;
+  }
 
-    if (auto pb = tryLoad(app_id)) return pb;
+  auto theme = Gtk::IconTheme::get_default();
+  auto try_icon = [&theme](const std::string& name) -> Glib::RefPtr<Gio::Icon> {
+    if (!theme->has_icon(name)) return {};
+    return Gio::ThemedIcon::create(name);
+  };
 
-    std::string lower = app_id;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (auto pb = tryLoad(lower)) return pb;
+  if (auto icon = try_icon(app_id)) return icon;
 
-    auto dot = app_id.rfind('.');
-    if (dot != std::string::npos) {
-        std::string last = app_id.substr(dot + 1);
-        std::transform(last.begin(), last.end(), last.begin(), ::tolower);
-        if (auto pb = tryLoad(last)) return pb;
-    }
+  std::string lower = app_id;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  if (auto icon = try_icon(lower)) return icon;
 
-    return {};
+  const auto dot = app_id.rfind('.');
+  if (dot != std::string::npos) {
+    std::string last = app_id.substr(dot + 1);
+    std::transform(last.begin(), last.end(), last.begin(), ::tolower);
+    if (auto icon = try_icon(last)) return icon;
+  }
+
+  return {};
 }
 
 }  // namespace waybar::modules::niri

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <giomm/icon.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/image.h>
@@ -29,7 +30,7 @@ class Workspace {
  private:
   void rebuildTaskbar(const std::vector<Json::Value>& my_windows);
 
-  Glib::RefPtr<Gdk::Pixbuf> loadIcon(const std::string& app_id, int size);
+  Glib::RefPtr<Gio::Icon> resolveIcon(const std::string& app_id);
 
   Workspaces& manager_;
   uint64_t id_;
@@ -39,9 +40,9 @@ class Workspace {
   //                 ├─ label_        workspace label / icon
   //                 └─ taskbar_box_  app icon buttons (shown only when taskbar enabled)
   Gtk::Button button_;
-  Gtk::Box box_;   
+  Gtk::Box box_;
   Gtk::Label label_;
-  Gtk::Box taskbar_box_; 
+  Gtk::Box taskbar_box_;
 };
 
 }  // namespace waybar::modules::niri
