@@ -48,10 +48,21 @@ Addressed by *mango/workspaces*
 	typeof: string ++
 	Command for right click. Same actions as *on-click*.
 
+*synchronize*: ++
+	typeof: bool ++
+	default: false ++
+	When true, activating a tag switches all monitors to that tag.
+
 *overview-label*: ++
 	typeof: string ++
 	default: "OVERVIEW" ++
 	Label shown on the overview button when the overview is active.
+
+*workspace-taskbar*: ++
+	typeof: object ++
+	When *enable* is true, replaces a populated workspace label with buttons for its applications.
+	*icon-size* controls their icon size and defaults to 16. Left click focuses an application;
+	middle click closes it.
 
 *expand*: ++
 	typeof: bool ++
@@ -110,3 +121,6 @@ When the overview button is clicked, the actions change to:
 - *#workspaces button.empty* – the workspace contains no clients.
 - *#workspaces button.current_output* – the workspace belongs to the output where the bar is shown.
 - *#workspaces button.overview* – the overview button (visible in overview mode).
+- *#workspaces .mango-workspace* – a workspace and its application buttons.
+- *#workspaces .mango-taskbar-btn* – an application button.
+- *#workspaces .mango-taskbar-btn.focused* – the focused application.
