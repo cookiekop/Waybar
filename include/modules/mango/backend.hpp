@@ -34,6 +34,7 @@ class IPC {
   std::unique_lock<std::mutex> lockData() { return std::unique_lock<std::mutex>(data_mutex_); }
 
   std::unordered_map<std::string, Json::Value> getMonitors() const;
+  std::vector<Json::Value> getClients() const;
   Json::Value getMonitor(const std::string& name);
   Json::Value getActiveClientForMonitor(const std::string& name) const;
   std::string getKeyboardLayout() const;
@@ -44,6 +45,7 @@ class IPC {
   IPC();
   ~IPC();
   void startIPC();
+  void watchIPC(const std::string& subscription, int& socket_fd);
   static int connectToSocket();
   void parseIPC(const std::string& line);
 
@@ -55,7 +57,9 @@ class IPC {
 
   std::atomic<bool> running_ = true;
   int sockfd_ = -1;
+  int clients_sockfd_ = -1;
   std::thread ipc_thread_;
+  std::thread clients_ipc_thread_;
   mutable std::mutex data_mutex_;
   std::unordered_map<std::string, Json::Value> monitors_;
   std::unordered_map<uint64_t, Json::Value> clients_;
