@@ -16,7 +16,12 @@ void Layout::onEvent(const Json::Value& ev) { dp.emit(); }
 void Layout::doUpdate() {
   std::lock_guard<std::mutex> lock(mutex_);
 
-  std::string symbol = IPC::getInstance().getLayoutSymbolForMonitor(bar_.output->name);
+  const auto monitor = IPC::getInstance().getMonitor(bar_.output->name);
+  std::string symbol = monitor["layout_symbol"].asString();
+  if (monitor["active_tags"].isArray()) {
+    const auto& active_tags = monitor["active_tags"];
+    if (active_tags.size() == 1 && active_tags[0].asInt() == 0) symbol = "OV";
+  }
 
   if (symbol.empty()) {
     label_.hide();

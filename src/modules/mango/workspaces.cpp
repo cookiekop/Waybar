@@ -61,6 +61,40 @@ Glib::RefPtr<Gio::Icon> resolveWebAppIcon(const std::string& app_id, const std::
   return {};
 }
 
+class CursorWarpGuard {
+ public:
+  CursorWarpGuard() {
+    restore_connection_.disconnect();
+    setEnabled(false);
+  }
+  CursorWarpGuard(const CursorWarpGuard&) = delete;
+  CursorWarpGuard& operator=(const CursorWarpGuard&) = delete;
+
+  ~CursorWarpGuard() {
+    restore_connection_ = Glib::signal_timeout().connect(
+        [] {
+          try {
+            setEnabled(true);
+          } catch (const std::exception& error) {
+            spdlog::error("Failed to restore Mango cursor warping: {}", error.what());
+          }
+          return false;
+        },
+        400);
+  }
+
+ private:
+  static sigc::connection restore_connection_;
+
+  static void setEnabled(bool enabled) {
+    Json::Value request;
+    request["command"] = std::string("dispatch setoption,warpcursor,") + (enabled ? "1" : "0");
+    IPC::send(request);
+  }
+};
+
+sigc::connection CursorWarpGuard::restore_connection_;
+
 }  // namespace
 
 Workspaces::TagWidget::TagWidget(uint64_t idx)
@@ -304,6 +338,10 @@ void Workspaces::updateTaskbar(TagWidget& widget, const std::vector<Json::Value>
 
   for (const auto& client : clients) {
     const uint64_t client_id = client["id"].asUInt64();
+    const uint64_t client_tag = client["tags"].isArray() && !client["tags"].empty()
+                                    ? client["tags"][0].asUInt64()
+                                    : 0;
+    const std::string client_monitor = client["monitor"].asString();
     const std::string app_id = client["appid"].asString();
     const std::string title = client["title"].isString() ? client["title"].asString() : app_id;
     auto* button = Gtk::make_managed<Gtk::Button>();
@@ -327,10 +365,28 @@ void Workspaces::updateTaskbar(TagWidget& widget, const std::vector<Json::Value>
       button->add(*Gtk::make_managed<Gtk::Label>(fallback));
     }
 
-    button->signal_pressed().connect([client_id] {
-      Json::Value request;
-      request["command"] = "dispatch focusid client," + std::to_string(client_id);
-      IPC::sendAsync(request);
+    button->signal_pressed().connect([client_id, client_tag, client_monitor] {
+      try {
+        CursorWarpGuard cursor_warp_guard;
+        Json::Value request;
+        request["command"] = "dispatch focusid client," + std::to_string(client_id);
+        IPC::send(request);
+
+        if (client_tag >= 1 && client_tag <= 9) {
+          for (const auto& [name, monitor] : IPC::getInstance().getMonitors()) {
+            if (name == client_monitor) continue;
+            request["command"] =
+                "dispatch viewcrossmon," + std::to_string(client_tag) + "," + name;
+            IPC::send(request);
+          }
+        }
+        if (!client_monitor.empty()) {
+          request["command"] = "dispatch focusmon," + client_monitor;
+          IPC::send(request);
+        }
+      } catch (const std::exception& error) {
+        spdlog::error("Failed to focus Mango client {} globally: {}", client_id, error.what());
+      }
     });
     button->signal_button_press_event().connect([client_id](GdkEventButton* event) -> bool {
       if (event->button != GDK_BUTTON_MIDDLE) return false;
@@ -402,8 +458,29 @@ bool Workspaces::handleButtonClick(GdkEventButton* event, uint64_t index, bool i
     if (action == "activate") command = "dispatch view," + std::to_string(index);
     if (action == "toggle") command = "dispatch toggleview," + std::to_string(index);
   }
+  if (!is_overview && action == "activate" && config_["synchronize"].asBool()) {
+    try {
+      CursorWarpGuard cursor_warp_guard;
+      const auto monitors = IPC::getInstance().getMonitors();
+      std::string active_monitor;
+      for (const auto& [name, monitor] : monitors) {
+        if (monitor["active"].asBool()) active_monitor = name;
+        Json::Value request;
+        request["command"] =
+            "dispatch viewcrossmon," + std::to_string(index) + "," + name;
+        IPC::send(request);
+      }
+      if (!active_monitor.empty()) {
+        Json::Value request;
+        request["command"] = "dispatch focusmon," + active_monitor;
+        IPC::send(request);
+      }
+    } catch (const std::exception& error) {
+      spdlog::error("Failed to synchronize Mango workspace {}: {}", index, error.what());
+    }
+    return true;
+  }
   if (!command.empty()) {
-    if (!is_overview && action == "activate" && config_["synchronize"].asBool()) command += ",1";
     Json::Value request;
     request["command"] = command;
     IPC::sendAsync(request);

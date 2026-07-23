@@ -49,7 +49,6 @@ class IPC {
   static int connectToSocket();
   void parseIPC(const std::string& line);
 
-  void handleMonitorUpdate(const Json::Value& mon);
   void updateFocusingClient(const Json::Value& client);
   void updateKeyboardLayout(const std::string& layout);
 
