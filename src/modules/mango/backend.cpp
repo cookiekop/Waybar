@@ -229,8 +229,12 @@ void IPC::parseIPC(const std::string& line) {
   }
 
   if (root.isMember("monitors") && root["monitors"].isArray()) {
-    for (const auto& mon : root["monitors"]) {
-      handleMonitorUpdate(mon);
+    {
+      std::lock_guard<std::mutex> lock(data_mutex_);
+      monitors_.clear();
+      for (const auto& mon : root["monitors"]) {
+        monitors_[mon["name"].asString()] = mon;
+      }
     }
 
     Json::Value active_monitor;
@@ -339,11 +343,6 @@ std::string IPC::getLayoutSymbolForMonitor(const std::string& name) const {
     return it->second["layout_symbol"].asString();
   }
   return {};
-}
-
-void IPC::handleMonitorUpdate(const Json::Value& mon) {
-  std::lock_guard<std::mutex> lock(data_mutex_);
-  monitors_[mon["name"].asString()] = mon;
 }
 
 void IPC::updateFocusingClient(const Json::Value& client) {
