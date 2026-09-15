@@ -24,7 +24,7 @@ Addressed by *mango/window*
 *icon*: ++
 	typeof: bool ++
 	default: false ++
-	Whether to show the application icon.
+	Whether to show the application icon. Uses the same desktop-entry and Chrome web-app icon lookup as the Mango workspace taskbar.
 
 *icon-size*: ++
 	typeof: integer ++

@@ -2,13 +2,14 @@
 
 #include <spdlog/spdlog.h>
 
+#include "util/app_icon.hpp"
 #include "util/rewrite_string.hpp"
 #include "util/sanitize_str.hpp"
 
 namespace waybar::modules::mango {
 
 Window::Window(const std::string& id, const Bar& bar, const Json::Value& config)
-    : AAppIconLabel(config, "window", id, "{title}", 0, true), bar_(bar) {
+    : AIconLabel(config, "window", id, "{title}", 0, true), bar_(bar) {
   IPC::getInstance().registerForIPC("monitor", this);
 }
 
@@ -25,7 +26,7 @@ void Window::doUpdate() {
   if (client.isNull() || !client.isObject() || client["title"].isNull()) {
     event_box_.hide();
     label_.hide();
-    updateAppIconName("", "");
+    updateAppIcon("", "");
     setClass("empty", true);
     if (!oldAppId_.empty()) setClass(oldAppId_, false);
     oldAppId_.clear();
@@ -47,7 +48,7 @@ void Window::doUpdate() {
                   fmt::arg("app_id", sanitized_appid)),
       config_["rewrite"]));
 
-  updateAppIconName(appid, "");
+  updateAppIcon(appid, title);
   if (tooltipEnabled()) label_.set_tooltip_markup(title);
 
   // Solo judgment
@@ -75,9 +76,31 @@ void Window::doUpdate() {
   }
 }
 
+void Window::updateAppIcon(const std::string& app_id, const std::string& title) {
+  if (!iconEnabled() || app_id.empty()) {
+    image_.clear();
+    image_.hide();
+    iconAppId_.clear();
+    iconTitle_.clear();
+    return;
+  }
+  if (iconAppId_ == app_id && iconTitle_ == title) return;
+  iconAppId_ = app_id;
+  iconTitle_ = title;
+
+  if (Glib::RefPtr<const Gio::Icon> icon = util::resolveAppIcon(app_id, title)) {
+    image_.set(icon, Gtk::ICON_SIZE_INVALID);
+    image_.set_pixel_size(app_icon_size_);
+    image_.show();
+  } else {
+    image_.clear();
+    image_.hide();
+  }
+}
+
 void Window::update() {
   doUpdate();
-  AAppIconLabel::update();
+  AIconLabel::update();
 }
 
 void Window::setClass(const std::string& className, bool enable) {

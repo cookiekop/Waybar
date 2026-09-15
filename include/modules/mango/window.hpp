@@ -5,13 +5,13 @@
 
 #include <mutex>
 
-#include "AAppIconLabel.hpp"
+#include "AIconLabel.hpp"
 #include "bar.hpp"
 #include "modules/mango/backend.hpp"
 
 namespace waybar::modules::mango {
 
-class Window : public AAppIconLabel, public EventHandler {
+class Window : public AIconLabel, public EventHandler {
  public:
   Window(const std::string&, const Bar&, const Json::Value&);
   ~Window() override;
@@ -20,10 +20,13 @@ class Window : public AAppIconLabel, public EventHandler {
  private:
   void onEvent(const Json::Value& ev) override;
   void doUpdate();
+  void updateAppIcon(const std::string& app_id, const std::string& title);
   void setClass(const std::string& className, bool enable);
 
   const Bar& bar_;
   std::string oldAppId_;
+  std::string iconAppId_;
+  std::string iconTitle_;
   std::mutex mutex_;
 };
 

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <giomm/icon.h>
 #include <gtkmm/box.h>
 #include <gtkmm/button.h>
 #include <gtkmm/label.h>
@@ -50,7 +49,6 @@ class Workspaces : public AModule, public EventHandler {
   void updateTag(TagWidget& widget, const Json::Value& tag, const Json::Value& monitor,
                  const std::vector<Json::Value>& clients);
   void updateTaskbar(TagWidget& widget, const std::vector<Json::Value>& clients);
-  Glib::RefPtr<Gio::Icon> resolveIcon(const std::string& app_id, const std::string& title);
   std::string getIcon(const std::string& value, const Json::Value& tag);
   bool handleButtonClick(GdkEventButton* event, uint64_t idx, bool isOverview);
 
