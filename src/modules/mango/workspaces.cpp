@@ -37,7 +37,7 @@ class CursorWarpGuard {
 
   static void setEnabled(bool enabled) {
     Json::Value request;
-    request["command"] = std::string("dispatch setoption,warpcursor,") + (enabled ? "1" : "0");
+    request["command"] = std::string("dispatch setoption,warp_cursor,") + (enabled ? "1" : "0");
     IPC::send(request);
   }
 };
