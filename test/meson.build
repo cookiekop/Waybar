@@ -13,6 +13,8 @@ test_src = files(
     'config.cpp',
     'taskbar_dnd.cpp',
     'fit_label.cpp',
+    'app_icon.cpp',
+    '../src/util/app_icon.cpp',
     '../src/config.cpp',
 )
 
